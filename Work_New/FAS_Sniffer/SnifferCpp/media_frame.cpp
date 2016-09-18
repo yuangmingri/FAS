@@ -3,6 +3,16 @@
 
 
 
+MediaFrame& MediaFrame::operator=(const MediaFrame& rhs)
+{
+    set_data(rhs.data(), rhs.data_len());
+    set_sequence_number(rhs.sequence_number());
+
+    return *this;
+}
+
+//----------------------------------------------------------------------
+
 uint8_t* MediaFrame::data()
 {
     return data_.data();

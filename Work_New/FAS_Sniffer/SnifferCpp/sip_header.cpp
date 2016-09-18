@@ -46,6 +46,7 @@ void SIPHeader::add(uint64_t now, const NetworkPacket& received_packet)
 
     std::memcpy(packet->data(), received_packet.data(), received_packet.size());
     packet->set_size(received_packet.size());
+    packet->set_ts(received_packet.ts());
 
 
     update_last_activity(now);

@@ -10,6 +10,8 @@ class MediaFrame
     public:
         static constexpr uint16_t maxlength = 256; 
 
+        MediaFrame& operator=(const MediaFrame&);
+
         uint8_t* data();
         const uint8_t* data() const;
         uint16_t data_len() const;

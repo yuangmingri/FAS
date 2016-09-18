@@ -43,7 +43,7 @@ scoped_lock<interprocess_mutex> segment_lock;
 
 
 std::unordered_map<std::string, std::unique_ptr<Call>> calls;
-std::unordered_map<uint32_t, std::unique_ptr<RTPMediaStream>> media_streams;
+std::unordered_map<uint64_t, std::unique_ptr<RTPMediaStream>> media_streams;
 std::deque<std::unique_ptr<RTPMediaStream>> media_streams_cached;
 std::unordered_map<std::string, std::unique_ptr<SIPHeader>> sip_headers;
 std::deque<std::unique_ptr<SIPHeader>> sip_headers_cached;
@@ -56,23 +56,27 @@ void acquire_segment()
     uint16_t attempt = 0;
 
     while (true) {
+    
+    
+    
         if (current_segment_cnt >= segments.size()) {
             current_segment_cnt = 0;
         }
+
+
 
         auto segment = segments.at(current_segment_cnt);
 
         scoped_lock<interprocess_mutex> lck(segment->mtx, try_to_lock);
         if (lck) {
             // looking only for unprocessed segments
-            if (!segment->network_packets_flushed && \
-                !segment->network_packets_captured && \
-                segment->network_packets_processed && \
-                !segment->network_packets_assembled) {
-                //std::cout << __func__ << " assembler shm" << current_segment_cnt << std::endl;
+            if (!segment->network_packets_flushed && !segment->network_packets_captured && segment->network_packets_processed && !segment->network_packets_assembled) {
+                std::cout << __func__ << " assembler shm" << current_segment_cnt << std::endl;
 
                 current_segment = segment;
                 segment_lock = std::move(lck);
+                
+                
 
                 break;
             } else {
@@ -80,7 +84,9 @@ void acquire_segment()
             }
         }
 
+
         ++current_segment_cnt;
+        
 
         if (++attempt >= segments.size()) {
             attempt = 0;
@@ -108,6 +114,9 @@ void release_segment()
 
 void process_segment()
 {
+
+//    std::cout << "segmet in assemble#" << current_segment_cnt <<  std::endl;
+
     handle_async_sip_header_output();
     handle_async_media_stream_output();
 
@@ -244,9 +253,21 @@ void analyze_sip_call(uint64_t now, const NetworkPacket& packet)
             auto ringtone_port = call->ringtone_port();
 
             if (ringtone_ip && ringtone_port) {
-                auto ringtone_stream = get_media_stream(ringtone_ip, ringtone_port);
+                auto ringtone_stream = get_media_stream_by_src(ringtone_ip, ringtone_port);
                 if (ringtone_stream) {
-                    call->set_ringtone_stream(std::move(ringtone_stream));
+                    if ((ringtone_ip == call->callee_ip()) && (ringtone_port == call->callee_port())) {
+                        //std::cout << "[!] cloning streams" << std::endl;
+
+
+                        auto callee_stream = make_stream(now);
+                        ringtone_stream->move_unexpected_frames(callee_stream);
+
+
+                        call->set_ringtone_stream(std::move(ringtone_stream));
+                        media_streams[callee_stream->unique_id()] = std::move(callee_stream);
+                    } else {
+                        call->set_ringtone_stream(std::move(ringtone_stream));
+                    }
                 }
             }
         }
@@ -313,11 +334,9 @@ void save_call(const std::string& call_id, Call* call)
 
 
     if (caller_ip && caller_port) {
-        auto caller_stream = get_media_stream(caller_ip, caller_port);
+        auto caller_stream = get_media_stream_by_src(caller_ip, caller_port);
         if (caller_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_caller.media";
-            //save_media_stream(filename, caller_stream);
-            //cache_stream(std::move(caller_stream));
             async_save_media_stream(filename, std::move(caller_stream));
         } else {
             //std::cout << "caller stream not found " << get_ip_str(caller_ip) << ":" << caller_port << std::endl;
@@ -325,11 +344,9 @@ void save_call(const std::string& call_id, Call* call)
     }
 
     if (callee_ip && callee_port) {
-        auto callee_stream = get_media_stream(callee_ip, callee_port);
+        auto callee_stream = get_media_stream_by_src(callee_ip, callee_port);
         if (callee_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_callee.media";
-            //save_media_stream(filename, callee_stream);
-            //cache_stream(std::move(callee_stream));
             async_save_media_stream(filename, std::move(callee_stream));
         } else {
             //std::cout << "callee stream not found " << get_ip_str(callee_ip) << ":" << callee_port << std::endl;
@@ -344,8 +361,6 @@ void save_call(const std::string& call_id, Call* call)
 
         if (ringtone_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_ringtone.media";
-            //save_media_stream(filename, ringtone_stream);
-            //cache_stream(std::move(ringtone_stream));
             async_save_media_stream(filename, std::move(ringtone_stream));
         } else {
             //std::cout << "ringtone stream not found " << get_ip_str(ringtone_ip) << ":" << ringtone_port << std::endl;
@@ -374,6 +389,11 @@ void save_media_stream(const std::string& filename, const RTPMediaStream* stream
             fdata.write(reinterpret_cast<const char*>(&header), header_len);
 
             auto frame_cnt = stream->frame_cnt();
+            auto expected_frame_cnt = stream->expected_frame_cnt();
+            if (frame_cnt > expected_frame_cnt) {
+                frame_cnt = expected_frame_cnt;
+            }
+
             uint32_t saved_frame_cnt = 0;
 
             for (uint32_t i = 0; i < frame_cnt; ++i) {
@@ -455,6 +475,8 @@ void save_sip_header(SIPHeader* hdr)
 
             h.caplen = packet->size();
             h.len = packet->size();
+            h.ts.tv_sec = packet->ts().tv_sec;
+            h.ts.tv_usec = packet->ts().tv_usec;
 
             pcap_dump(reinterpret_cast<u_char*>(dumper), &h, packet->data());
         }
@@ -560,9 +582,8 @@ std::unique_ptr<SIPHeader> make_header(uint64_t now, const char* call_id)
 
 //----------------------------------------------------------------------
 
-std::unique_ptr<RTPMediaStream> make_stream(uint64_t now, const NetworkPacket& packet)
+std::unique_ptr<RTPMediaStream> make_stream(uint64_t now)
 {
-    auto meta = packet.rtp_meta();
     std::unique_ptr<RTPMediaStream> stream_uptr = nullptr;
 
     if (!media_streams_cached.empty()) {
@@ -572,13 +593,25 @@ std::unique_ptr<RTPMediaStream> make_stream(uint64_t now, const NetworkPacket& p
         stream_uptr = std::make_unique<RTPMediaStream>();
     }
 
+    stream_uptr->flush(now);
+
+
+    return stream_uptr;
+}
+
+//----------------------------------------------------------------------
+
+std::unique_ptr<RTPMediaStream> make_stream(uint64_t now, const NetworkPacket& packet)
+{
+    auto meta = packet.rtp_meta();
+    auto stream_uptr = make_stream(now);
+
     stream_uptr->set_id(meta->id());
     stream_uptr->set_src(packet.src());
     stream_uptr->set_dst(packet.dst());
     stream_uptr->set_sport(packet.sport());
     stream_uptr->set_dport(packet.dport());
     stream_uptr->set_codec(meta->codec());
-    stream_uptr->flush(now);
 
 
     auto& details = codec_lookup_table.at(meta->codec());
@@ -712,6 +745,26 @@ std::unique_ptr<RTPMediaStream> get_media_stream(uint32_t ip, uint16_t port)
     }
 
     //std::cout << "\rstream count " << media_streams.size() << std::flush;
+
+    return nullptr;
+}
+
+//----------------------------------------------------------------------
+
+std::unique_ptr<RTPMediaStream> get_media_stream_by_src(uint32_t ip, uint16_t port)
+{
+    for (auto itr = media_streams.begin(); itr != media_streams.end();) {
+        auto& stream = itr->second;
+
+        if ((stream->src() == ip) && (stream->sport() == port)) {
+            auto found_stream = std::move(itr->second);
+            media_streams.erase(itr);
+
+            return std::move(found_stream);
+        } else {
+            ++itr;
+        }
+    }
 
     return nullptr;
 }

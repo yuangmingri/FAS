@@ -181,7 +181,6 @@ void analyze(NetworkPacket& packet, decode_context *ctx)
 
 void analyze_sip_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint16_t payload_len)
 {
-    
     std::cout << "analyze sip header"  << std::endl;
 
     std::string payload_str(reinterpret_cast<const char*>(payload_ptr), payload_len);

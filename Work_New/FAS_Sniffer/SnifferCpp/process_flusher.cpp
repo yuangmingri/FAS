@@ -30,6 +30,8 @@ void acquire_segment()
             current_segment_cnt = 0;
         }
 
+
+
         auto segment = segments.at(current_segment_cnt);
 
         scoped_lock<interprocess_mutex> lck(segment->mtx, try_to_lock);
@@ -39,6 +41,8 @@ void acquire_segment()
                 !segment->network_packets_captured && \
                 !segment->network_packets_processed) {
                 //std::cout << __func__ << " flusher shm" << current_segment_cnt << std::endl;
+                
+    //            std::cout << "acquire_segment_by_flusher" << std::endl;
 
                 current_segment = segment;
                 segment_lock = std::move(lck);
@@ -49,6 +53,7 @@ void acquire_segment()
             }
         }
 
+            
         ++current_segment_cnt;
 
         if (++attempt >= segments.size()) {
@@ -80,6 +85,9 @@ void process_segment()
     for (uint32_t i = 0; i < current_segment->data.size(); ++i) {
         auto& packet = current_segment->data.at(i);
 
+//std::cout << "packet_flush!!!!!!!!!!" << std::endl;
+//std::cout << "segment_for_flusher#" << current_segment_cnt << std::endl;
+ 
         packet.flush();
     }
 }

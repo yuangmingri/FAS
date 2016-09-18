@@ -11,18 +11,18 @@ extern uint16_t CONFIG_CAPTURE_DURATION;
 
 void RTPMediaStream::add_frame(uint64_t now, uint16_t sequence_number, const uint8_t* payload_ptr, uint16_t payload_len)
 {
-    if (received_frame_cnt_ >= expected_frame_cnt_) {
+    if (frame_cnt_ >= expected_frame_cnt_ * 2) {
         return;
     }
 
 
     if (payload_len <= MediaFrame::maxlength) {
-        auto& frame = frames_.at(received_frame_cnt_);
+        auto& frame = frames_.at(frame_cnt_);
 
         frame->set_data(payload_ptr, payload_len);
         frame->set_sequence_number(sequence_number);
 
-        ++received_frame_cnt_;
+        ++frame_cnt_;
         update_last_received(now);
     } else {
         std::cout << "[!] unable to add media frame, wrong payload length " << payload_len << std::endl;
@@ -33,13 +33,13 @@ void RTPMediaStream::add_frame(uint64_t now, uint16_t sequence_number, const uin
 
 void RTPMediaStream::flush(uint64_t now)
 {
-    received_frame_cnt_ = 0;
+    frame_cnt_ = 0;
     update_last_received(now);
 
 
-    std::cout << "<<<< STREAM >>>> " << std::hex << id() << std::dec << " from ";
-    std::cout << get_ip_str(src()) << ":" << sport() << " -> to ";
-    std::cout << get_ip_str(dst()) << ":" << dport() << std::endl;
+    //std::cout << "<<<< STREAM >>>> " << std::hex << id() << std::dec << " from ";
+    //std::cout << get_ip_str(src()) << ":" << sport() << " -> to ";
+    //std::cout << get_ip_str(dst()) << ":" << dport() << std::endl;
 }
 
 //----------------------------------------------------------------------
@@ -47,6 +47,22 @@ void RTPMediaStream::flush(uint64_t now)
 uint32_t RTPMediaStream::id() const
 {
     return id_;
+}
+
+//----------------------------------------------------------------------
+
+uint64_t RTPMediaStream::unique_id() const
+{
+    uint64_t unique_id = 0;
+    uint64_t stream_id = id();
+    uint32_t stream_sport = sport();
+    uint32_t stream_dport = dport();
+
+    unique_id = unique_id | stream_id << 32;
+    unique_id = unique_id | stream_sport << 16;
+    unique_id = unique_id | stream_dport;
+
+    return unique_id;
 }
 
 //----------------------------------------------------------------------
@@ -88,7 +104,7 @@ Codec RTPMediaStream::codec() const
 
 uint32_t RTPMediaStream::frame_cnt() const
 {
-    return received_frame_cnt_;
+    return frame_cnt_;
 }
 
 //----------------------------------------------------------------------
@@ -103,6 +119,37 @@ uint32_t RTPMediaStream::expected_frame_cnt() const
 const std::vector<std::unique_ptr<MediaFrame>>& RTPMediaStream::frames() const
 {
     return frames_;
+}
+
+//----------------------------------------------------------------------
+
+void RTPMediaStream::move_unexpected_frames(const std::unique_ptr<RTPMediaStream>& stream)
+{
+    stream->set_id(id());
+    stream->set_src(src());
+    stream->set_dst(dst());
+    stream->set_sport(sport());
+    stream->set_dport(dport());
+    stream->set_codec(codec());
+    stream->set_frame_cnt(0);
+    stream->set_expected_frame_cnt(expected_frame_cnt());
+
+    auto cnt = frame_cnt();
+    auto expected_cnt = expected_frame_cnt();
+
+    if (cnt > expected_cnt) {
+        auto to_copy_cnt = cnt - expected_cnt;
+
+        stream->set_frame_cnt(to_copy_cnt);
+        for (uint32_t i = 0; i < to_copy_cnt; ++i) {
+            auto& src_frame = frames_.at(expected_cnt + i);
+            auto& dst_frame = stream->frames().at(i);
+
+            *dst_frame = *src_frame;
+        }
+
+        set_frame_cnt(expected_cnt);
+    }
 }
 
 //----------------------------------------------------------------------
@@ -149,11 +196,18 @@ void RTPMediaStream::set_codec(Codec codec)
 
 //----------------------------------------------------------------------
 
+void RTPMediaStream::set_frame_cnt(uint32_t frame_cnt)
+{
+    frame_cnt_ = frame_cnt;
+}
+
+//----------------------------------------------------------------------
+
 void RTPMediaStream::set_expected_frame_cnt(uint32_t expected_frame_cnt)
 {
     expected_frame_cnt_ = expected_frame_cnt;
 
-    while (frames_.size() < expected_frame_cnt_) {
+    while (frames_.size() < expected_frame_cnt_ * 2) {
         auto frame = std::make_unique<MediaFrame>();
         frames_.emplace_back(std::move(frame));
     }
@@ -163,18 +217,12 @@ void RTPMediaStream::set_expected_frame_cnt(uint32_t expected_frame_cnt)
 
 bool RTPMediaStream::ready(uint64_t now)
 {
-    if (received_frame_cnt_ < expected_frame_cnt_) {
-        return false;
-    }
-
-
     auto seconds = now - last_received_;
-    if (seconds < CONFIG_CAPTURE_DURATION * 7) {
-        return false;
+    if (seconds >= CONFIG_CAPTURE_DURATION * 7) {
+        return true;
     }
 
-
-    return true;
+    return false;
 }
 
 //----------------------------------------------------------------------

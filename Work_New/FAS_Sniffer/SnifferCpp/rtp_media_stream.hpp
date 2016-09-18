@@ -16,6 +16,7 @@ class RTPMediaStream
         void add_frame(uint64_t, uint16_t, const uint8_t*, uint16_t);
         void flush(uint64_t);
         uint32_t id() const;
+        uint64_t unique_id() const;
         uint32_t src() const;
         uint32_t dst() const;
         uint16_t sport() const;
@@ -24,12 +25,14 @@ class RTPMediaStream
         uint32_t frame_cnt() const;
         uint32_t expected_frame_cnt() const;
         const std::vector<std::unique_ptr<MediaFrame>>& frames() const;
+        void move_unexpected_frames(const std::unique_ptr<RTPMediaStream>&);
         void set_id(uint32_t);
         void set_src(uint32_t);
         void set_dst(uint32_t);
         void set_sport(uint16_t);
         void set_dport(uint16_t);
         void set_codec(Codec);
+        void set_frame_cnt(uint32_t);
         void set_expected_frame_cnt(uint32_t);
         bool ready(uint64_t);
     private:
@@ -41,8 +44,8 @@ class RTPMediaStream
         uint16_t sport_;
         uint16_t dport_;
         Codec codec_;
+        uint32_t frame_cnt_;
         uint32_t expected_frame_cnt_;
-        uint32_t received_frame_cnt_;
         std::vector<std::unique_ptr<MediaFrame>> frames_;
         uint64_t last_received_;
 };

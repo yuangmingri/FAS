@@ -64,12 +64,12 @@ struct shm_remove
 {
     shm_remove(std::string name): shm_name(name)
     {
-	    shared_memory_object::remove(shm_name.c_str());
+        shared_memory_object::remove(shm_name.c_str());
         std::cout << __func__ << shm_name << std::endl;
     };
     ~shm_remove()
     {
-	    shared_memory_object::remove(shm_name.c_str());
+        shared_memory_object::remove(shm_name.c_str());
         std::cout << __func__ << shm_name << std::endl;
     };
     std::string shm_name;
@@ -79,7 +79,7 @@ struct shm_remove
 
 struct shared_memory_segment
 {
-    static constexpr uint32_t network_packet_count = 5120;
+    static constexpr uint32_t network_packet_count = 100;
 
     interprocess_mutex mtx;
     bool network_packets_flushed = false;

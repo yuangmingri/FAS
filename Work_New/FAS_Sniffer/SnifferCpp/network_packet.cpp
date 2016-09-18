@@ -1,4 +1,7 @@
 #include "network_packet.hpp"
+#include <cstring>
+#include <iostream>
+#include <sstream>
 
 
 
@@ -18,10 +21,16 @@ const uint8_t* NetworkPacket::data() const
 
 void NetworkPacket::flush()
 {
+    
+//    std::cout << "NetworkPacket_flush" << std::endl;
+    
+    
     src_ = 0;
     dst_ = 0;
     sport_ = 0;
     dport_ = 0;
+    ts_.tv_sec = 0;
+    ts_.tv_usec = 0;
     proto_rtp_ = false;
     proto_sip_ = false;
     proto_unknown_ = true;
@@ -33,13 +42,21 @@ void NetworkPacket::flush()
 
 uint32_t NetworkPacket::src() const
 {
+
+//    std::cout << "NetworkPacket_src" << src_ <<  std::endl;
+    
     return src_;
+    
 }
 
 //----------------------------------------------------------------------
 
 uint32_t NetworkPacket::dst() const
 {
+
+//    std::cout << "NetworkPacket_dst" << dst_ <<  std::endl;
+
+
     return dst_;
 }
 
@@ -73,8 +90,16 @@ uint16_t NetworkPacket::payload_len() const
 
 //----------------------------------------------------------------------
 
+const struct timeval& NetworkPacket::ts() const
+{
+    return ts_;
+}
+
+//----------------------------------------------------------------------
+
 bool NetworkPacket::proto_rtp() const
 {
+//std::cout << "NetworkPacket_protoRTP" <<   std::endl;
     return proto_rtp_;
 }
 
@@ -82,6 +107,8 @@ bool NetworkPacket::proto_rtp() const
 
 bool NetworkPacket::proto_sip() const
 {
+
+//std::cout << "NetworkPacket_protosip" <<   std::endl;
     return proto_sip_;
 }
 
@@ -89,6 +116,9 @@ bool NetworkPacket::proto_sip() const
 
 bool NetworkPacket::proto_unknown() const
 {
+
+//    std::cout << "NetworkPacket_protounknown" <<   std::endl;
+
     return proto_unknown_;
 }
 
@@ -191,13 +221,6 @@ void NetworkPacket::set_proto_unknown()
 
 //----------------------------------------------------------------------
 
-uint16_t NetworkPacket::size() const
-{
-    return size_;
-}
-
-//----------------------------------------------------------------------
-
 void NetworkPacket::set_size(uint16_t size)
 {
     if (size > NetworkPacket::length) {
@@ -207,3 +230,17 @@ void NetworkPacket::set_size(uint16_t size)
     size_ = size;
 }
 
+//----------------------------------------------------------------------
+
+void NetworkPacket::set_ts(const struct timeval& ts)
+{
+    ts_.tv_sec = ts.tv_sec;
+    ts_.tv_usec = ts.tv_usec;
+}
+
+//----------------------------------------------------------------------
+
+uint16_t NetworkPacket::size() const
+{
+    return size_;
+}

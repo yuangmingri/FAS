@@ -95,6 +95,10 @@ std::unique_ptr<SIPHeader> make_header(uint64_t, const char*);
 
 //----------------------------------------------------------------------
 
+std::unique_ptr<RTPMediaStream> make_stream(uint64_t);
+
+//----------------------------------------------------------------------
+
 std::unique_ptr<RTPMediaStream> make_stream(uint64_t, const NetworkPacket&);
 
 //----------------------------------------------------------------------
@@ -120,6 +124,10 @@ std::future<bool> is_write_ready_sip();
 //----------------------------------------------------------------------
 
 std::unique_ptr<RTPMediaStream> get_media_stream(uint32_t, uint16_t);
+
+//----------------------------------------------------------------------
+
+std::unique_ptr<RTPMediaStream> get_media_stream_by_src(uint32_t, uint16_t);
 
 
 } // namespace assembler

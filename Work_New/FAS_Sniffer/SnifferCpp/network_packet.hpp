@@ -22,6 +22,7 @@ class NetworkPacket
         uint16_t dport() const;
         const uint8_t* payload_ptr() const;
         uint16_t payload_len() const;
+        const struct timeval& ts() const;
         bool proto_rtp() const;
         bool proto_sip() const;
         bool proto_unknown() const;
@@ -41,11 +42,13 @@ class NetworkPacket
         void set_proto_sip();
         void set_proto_unknown();
         void set_size(uint16_t);
+        void set_ts(const struct timeval&);
     private:
         uint32_t src_ = 0;
         uint32_t dst_ = 0;
         uint16_t sport_ = 0;
         uint16_t dport_ = 0;
+        struct timeval ts_;
         bool proto_rtp_ = false;
         bool proto_sip_ = false;
         bool proto_unknown_ = true;

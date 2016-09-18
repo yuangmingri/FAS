@@ -31,7 +31,7 @@ scoped_lock<interprocess_mutex> segment_lock;
 void acquire_segment()
 {
     uint16_t attempt = 0;
-   
+
     while (true) {
         if (current_segment_cnt >= segments.size()) {
             current_segment_cnt = 0;
@@ -47,7 +47,7 @@ void acquire_segment()
                 !segment->network_packets_processed && \
                 !segment->network_packets_assembled) {
                 //std::cout << __func__ << " capture shm" << current_segment_cnt << std::endl;
-
+    
                 current_segment = segment;
                 segment_lock = std::move(lck);
 
@@ -56,7 +56,8 @@ void acquire_segment()
                 lck.unlock();
             }
         }
-        printf("acquire_segment%d\n",current_segment_cnt);
+
+
         ++current_segment_cnt;
 
         if (++attempt >= segments.size()) {
@@ -98,8 +99,10 @@ void release_segment()
 
 void packet_captured(uint8_t*, const struct pcap_pkthdr* hdr, const uint8_t* packet)
 {
-    static int  cnt = 0;
-    printf("packet_captured %d\n",cnt++);
+    
+    
+    
+    
     if ((hdr->len > ETHERNET_HEADER_LEN) && (hdr->len <= NetworkPacket::length)) {
         // common case
         if (current_segment && (current_packet_cnt < shm_segment_packet_cnt)) {
@@ -109,9 +112,13 @@ void packet_captured(uint8_t*, const struct pcap_pkthdr* hdr, const uint8_t* pac
             auto& packet = current_segment->data.at(current_packet_cnt);
             std::memcpy(packet.data(), payload_ptr, payload_len);
             packet.set_size(payload_len);
+            packet.set_ts(hdr->ts);
+
+//     std::cout << "packet captured" << current_packet_cnt << std::endl;
+//     std::cout << "segment_for_capture#" << current_segment_cnt << std::endl;
 
             ++current_packet_cnt;
-
+        
             return;
         } else if (current_packet_cnt >= shm_segment_packet_cnt) {
             //std::cout << __func__ << " current_packet_cnt >= shm_segment_packet_cnt -> " << current_packet_cnt << " : " << shm_segment_packet_cnt << std::endl;

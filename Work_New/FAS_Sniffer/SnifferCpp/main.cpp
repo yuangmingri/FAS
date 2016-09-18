@@ -22,18 +22,18 @@ std::string CONFIG_NAME                                = "SIP/RTP Sniffer";
 std::string CONFIG_VERSION                             = "0.2";
 std::string CONFIG_AUTHOR                              = "mx.dot";
 uint16_t CONFIG_CAPTURE_DURATION                       = 20; // in seconds
-std::string CONFIG_RTP_DESTINATION_DIRECTORY           = "/memory/media_output"; // for data and metafiles
-std::string CONFIG_SIP_DESTINATION_DIRECTORY           = "/memory/header_output"; // for SIP headers
+std::string CONFIG_RTP_DESTINATION_DIRECTORY           = "/memory/media_output/"; // for data and metafiles
+std::string CONFIG_SIP_DESTINATION_DIRECTORY           = "/memory/header_output/"; // for SIP headers
 uint32_t CONFIG_RTP_DESTINATION_DIRECTORY_MAXSIZE      = 1024; // in mb
 uint32_t CONFIG_SIP_DESTINATION_DIRECTORY_MAXSIZE      = 512; // in mb
 uint32_t CONFIG_RTP_DESTINATION_DIRECTORY_MAX_FILE_CNT = 10240; // maximum files in directory
 uint32_t CONFIG_SIP_DESTINATION_DIRECTORY_MAX_FILE_CNT = 102400; // maximum files in directory
 uint16_t CONFIG_WORKING_PROCESSES                      = 10; // number of workers
 uint16_t CONFIG_STREAM_TIMEOUT                         = 30; // in seconds
-uint16_t CONFIG_SIP_HEADER_TIMEOUT                     = 3; // in minutes
+uint16_t CONFIG_SIP_HEADER_TIMEOUT                     = 1; // in minutes
 uint16_t CONFIG_DISPATCHER_TIMEOUT                     = 5; // in seconds
 uint32_t CONFIG_PCAP_BUFFER_SIZE                       = 10240000;
-bool CONFIG_MODE_DUMP_SIP_HEADERS                      = false;
+bool CONFIG_MODE_DUMP_SIP_HEADERS                      = true;
 bool CONFIG_MODE_DUMP_RTP_STREAMS                      = true;
 std::string CONFIG_CAPTURE_OPTIONS                     = "udp";
 std::string CONFIG_NETWORK_INTERFACE                   = "eth0";
@@ -267,7 +267,7 @@ int main(int argc, char** argv)
     // initialize shared memory storage
     init_shared_memory();
 
-    printf("launching processes\n");
+
     // launch worker processes
     for (uint16_t i = 0; i < CONFIG_WORKING_PROCESSES; ++i) {
         launch_process(process_worker);

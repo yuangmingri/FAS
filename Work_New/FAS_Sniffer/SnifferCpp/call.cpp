@@ -1,5 +1,4 @@
 #include "call.hpp"
-#include <iostream>
 
 
 
@@ -120,7 +119,5 @@ void Call::set_ringtone(uint32_t ip, uint16_t port)
 
 void Call::set_ringtone_stream(std::unique_ptr<RTPMediaStream> stream)
 {
-    //std::cout << __func__ << std::endl;
-
     ringtone_stream_ = std::move(stream);
 }
