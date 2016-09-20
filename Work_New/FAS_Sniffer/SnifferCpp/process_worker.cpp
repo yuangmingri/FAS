@@ -277,10 +277,14 @@ void decode_audio(decode_context *ctx)
             	{
             		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), left_samples);
             		bool vad = ctx->vad->process((char*)ctx->buf);
-                    if(vad)
-                        printf("voice\n");
-                    else
-                        printf("non voice\n");
+                        if(vad)
+                        {
+                            printf("voice\n");
+                            fprintf(ctx->fp,"voice\n");
+                        }else{
+                            printf("non voice\n");
+                            fprintf(ctx->fp,"non voice\n");
+                        }
             		ctx->bufsamples = 0;
                         isamples -= left_samples;
             	}else {
@@ -309,7 +313,17 @@ void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
         uint16_t media_payload_len = payload_len - hdr_len;
         uint8_t payload_type;
         AVCodecID codec_type;
+        
         printf("rtpsize=%d\n",media_payload_len);
+        if(ctx->fp == NULL)
+        {
+            char filename[64];
+            time_t tval = time(NULL);
+            struct tm *t = localtime(&tval);
+            sprintf(filename,"%d_%d_%d_%d_%d_%d.txt",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+            ctx->fp = fopen(filename,"w"); 
+        }
+        fprintf(ctx->fp, "rtp payloadsize=%d\n",media_payload_len);
         auto meta = packet.rtp_meta();
         
         payload_type = get_rtp_payload_type(hdr);

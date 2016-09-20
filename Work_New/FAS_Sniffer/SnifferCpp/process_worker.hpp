@@ -25,6 +25,7 @@ typedef struct {
     VadDetector *vad;
     short buf[240];
     int bufsamples;
+    FILE *fp;
 } decode_context;
 
 
