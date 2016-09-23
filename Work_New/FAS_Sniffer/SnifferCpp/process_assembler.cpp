@@ -568,7 +568,8 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
     fclose(fp);
     
     // Saving to postgres database
-    if(callid.find("callee") != std::string::npos)
+    //if(callid.find("callee") != std::string::npos)
+    if(1)
     {
         PGconn *conn = NULL;
 	    conn = postgress_connect();
