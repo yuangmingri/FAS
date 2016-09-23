@@ -1,6 +1,6 @@
 CXX = g++
 CXXFLAGS = -I../FAS -I../install/include --std=c++14 -Wall -W -Os
-LDLIBS = -L../FAS -lVadDetector -L../install/lib -lavformat -lavcodec -lm -lz -ldl -lavutil -lavfilter -lswresample -lswscale -lpcap -lpcre -lpthread -lboost_system -lrt -ldl
+LDLIBS = -L../FAS -lVadDetector -L../install/lib -lavformat -lavcodec -lm -lz -ldl -lavutil -lavfilter -lswresample -lswscale -lpcap -lpcre -lpthread -lboost_system -lpq -lrt -ldl
 
 
 all: rtp_sniffer

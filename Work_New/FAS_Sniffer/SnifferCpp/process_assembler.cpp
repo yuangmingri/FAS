@@ -13,6 +13,8 @@
 #include "sip_header.hpp"
 #include "sip_metadata.hpp"
 
+#include <libpq-fe.h>
+
 #define ENABLE_FAS
 
 using boost::interprocess::interprocess_mutex;
@@ -436,7 +438,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
         auto caller_stream = get_media_stream_by_src(caller_ip, caller_port);
         if (caller_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_caller.media";
-            async_save_media_stream(filename, std::move(caller_stream),ctx);
+            async_save_media_stream(call_id,filename, std::move(caller_stream),ctx);
         } else {
             //std::cout << "caller stream not found " << get_ip_str(caller_ip) << ":" << caller_port << std::endl;
         }
@@ -446,7 +448,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
         auto callee_stream = get_media_stream_by_src(callee_ip, callee_port);
         if (callee_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_callee.media";
-            async_save_media_stream(filename, std::move(callee_stream),ctx);
+            async_save_media_stream(call_id,filename, std::move(callee_stream),ctx);
         } else {
             //std::cout << "callee stream not found " << get_ip_str(callee_ip) << ":" << callee_port << std::endl;
         }
@@ -460,7 +462,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 
         if (ringtone_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_ringtone.media";
-            async_save_media_stream(filename, std::move(ringtone_stream),ctx);
+            async_save_media_stream(call_id,filename, std::move(ringtone_stream),ctx);
         } else {
             //std::cout << "ringtone stream not found " << get_ip_str(ringtone_ip) << ":" << ringtone_port << std::endl;
         }
@@ -468,7 +470,62 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 }
 
 //----------------------------------------------------------------------
-void save_vad_result(const std::string& filename, const RTPMediaStream* stream,decode_context *ctx)
+
+PGconn* postgress_connect()
+{
+	PGconn *conn = NULL;
+	char conninfo_str[256];
+    char sSql[256];
+    
+	sprintf(conninfo_str, "user='postgres' password='' dbname='class4_v5' hostaddr='127.0.0.1'");
+	conn = PQconnectdb(conninfo_str);
+
+	// Check to see that the back-end connection was successfully made
+	if (PQstatus(conn) != CONNECTION_OK)
+	{
+		printf("Connection to database failed\n");
+		PQfinish(conn);
+		return NULL;
+	}
+    
+
+	PGresult *res = NULL;
+	sprintf(sSql, "CREATE TABLE IF NOT EXISTS public.fas_check_result (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);");
+	res = PQexec(conn, sSql);
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		printf("Create table failed\n");
+		PQclear(res);
+		PQfinish(conn);
+		return NULL;
+	}	
+	// Clear result
+	PQclear(res);
+	return conn;
+}
+int InsertRecord(PGconn *conn, const char* table_name, const char* calltime, const char *callid,int result)
+{
+	// Append the SQL statement
+	char sSql[256];
+	sprintf(sSql, "INSERT INTO %s(callid,calltime,result) VALUES('%s', '%s', '%d')", table_name, calltime, callid, result);
+
+	// Execute with SQL statement
+	PGresult *res = PQexec(conn, sSql);
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		printf("Insert record failed\n");
+		PQclear(res);
+		PQfinish(conn);
+		return -1;
+	}
+
+	// Clear result
+	PQclear(res);
+	return 0;
+}
+void save_vad_result(const std::string& callid,const std::string& filename, const RTPMediaStream* stream,decode_context *ctx)
 {
     int codec = static_cast<int>(stream->codec());
     char buf[128];
@@ -504,10 +561,35 @@ void save_vad_result(const std::string& filename, const RTPMediaStream* stream,d
         ctx->avpkt.data = (uint8_t *)frame->data();
         ctx->avpkt.size = frame->data_len();
         decode_audio(ctx);
-    }  
+    }
+      
     fprintf(fp,"total_frames=%d\n",ctx->total_frames);
     fprintf(fp,"voice_frames=%d\n",ctx->voice_frames);
     fclose(fp);
+    
+    // Saving to postgres database
+    if(callid.find("callee") != std::string::npos)
+    {
+        PGconn *conn = NULL;
+	    conn = postgress_connect();
+	    time_t tval = time(NULL);
+        struct tm *t = localtime(&tval);
+        char timebuf[64];
+        sprintf(timebuf,"%d.%02d.%02d %02d:%02d:%02d.txt",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+        int result = 1;
+        if(ctx->voice_frames > 5)
+            result = 1;
+        else
+            result = 0;
+            
+        if(conn)
+        {
+            InsertRecord(conn,"public.fas_check_result",timebuf,callid.c_str(),result);
+            PQfinish(conn);
+        }
+    }
+    
+    
 }
 
 void save_media_stream(const std::string& filename, const RTPMediaStream* stream)
@@ -572,12 +654,12 @@ void async_save_header(std::unique_ptr<SIPHeader> header)
 
 //----------------------------------------------------------------------
 
-void async_save_media_stream(const std::string& filename, std::unique_ptr<RTPMediaStream> stream_uptr,decode_context *ctx)
+void async_save_media_stream(const std::string& callid,const std::string& filename, std::unique_ptr<RTPMediaStream> stream_uptr,decode_context *ctx)
 {
     auto stream = stream_uptr.get();
     stream_uptr.release();
 
-    save_vad_result(filename,stream,ctx);
+    save_vad_result(callid,filename,stream,ctx);
     auto save_task = [filename = filename, stream = stream]() mutable {
         save_media_stream(filename, stream);
         return std::unique_ptr<RTPMediaStream>(stream);

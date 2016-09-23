@@ -100,7 +100,7 @@ void async_save_header(std::unique_ptr<SIPHeader>);
 
 //----------------------------------------------------------------------
 
-void async_save_media_stream(const std::string&, std::unique_ptr<RTPMediaStream>,decode_context *);
+void async_save_media_stream(const std::string&,const std::string&, std::unique_ptr<RTPMediaStream>,decode_context *);
 
 //----------------------------------------------------------------------
 
