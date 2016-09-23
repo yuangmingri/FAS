@@ -7,7 +7,7 @@
 #include "include.hpp"
 #include "rtp_media_stream_processing.hpp"
 #include "sip_header_processing.hpp"
-
+#include <libpq-fe.h>
 
 using boost::interprocess::interprocess_mutex;
 using boost::interprocess::scoped_lock;
@@ -227,7 +227,6 @@ void analyze_sip_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
 void decode_audio(decode_context *ctx)
 {
     int len = 0;
-    static int decimator = 0;
 
     while (ctx->avpkt.size > 0) {
         int i, ch = 0;
@@ -258,17 +257,11 @@ void decode_audio(decode_context *ctx)
             int isamples = ctx->decoded_frame->nb_samples;
             int left_samples;
             int total_samples = sizeof(ctx->buf)/2;
-            if(decimator % 10 == 0)
-            {
-                short *paudio = (short*)ctx->decoded_frame->data[ch];
-                for(i = 0; i < isamples; i++)
-                {
-                    printf("%d,", *paudio);
-                    paudio++;
-                }
-                printf("\n");
-            }
-            decimator += 1;
+
+            short *paudio = (short*)ctx->decoded_frame->data[ch];
+            fwrite(paudio,1,isamples*2,ctx->fp2);
+           
+            //fprintf(ctx->fp, "decoded samples=%d\n",isamples);
             fprintf(stderr, "decoded samples=%d, total=%d, buf_samples = %d\n",ctx->decoded_frame->nb_samples,total_samples,ctx->bufsamples);
             while(isamples > 0 )
             {
@@ -279,12 +272,13 @@ void decode_audio(decode_context *ctx)
             		bool vad = ctx->vad->process((char*)ctx->buf);
                         if(vad)
                         {
-                            printf("voice\n");
-                            fprintf(ctx->fp,"voice\n");
+                            printf("true ");
+                            fprintf(ctx->fp,"true\n");
                         }else{
-                            printf("non voice\n");
-                            fprintf(ctx->fp,"non voice\n");
+                            //printf("false ");
+                            fprintf(ctx->fp,"false\n");
                         }
+                        fflush(ctx->fp);
             		ctx->bufsamples = 0;
                         isamples -= left_samples;
             	}else {
@@ -320,10 +314,12 @@ void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
             char filename[64];
             time_t tval = time(NULL);
             struct tm *t = localtime(&tval);
-            sprintf(filename,"%d_%d_%d_%d_%d_%d.txt",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-            ctx->fp = fopen(filename,"w"); 
+            sprintf(filename,"/memory/media_output/%d_%02d_%02d_%02d_%02d_%02d.txt",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+            ctx->fp = fopen(filename,"w");
+            sprintf(filename,"/memory/media_output/%d_%02d_%02d_%02d_%02d_%02d.raw",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min,t->tm_sec); 
+            ctx->fp2 = fopen(filename,"w");
         }
-        fprintf(ctx->fp, "rtp payloadsize=%d\n",media_payload_len);
+        //fprintf(ctx->fp, "rtp payloadsize=%d\n",media_payload_len);
         auto meta = packet.rtp_meta();
         
         payload_type = get_rtp_payload_type(hdr);
@@ -387,7 +383,7 @@ void process_worker()
         exit_nicely();
     }
     
-    ctx.vad = new VadDetector(240,8000);
+    ctx.vad = new VadDetector(256,8000);
     av_register_all();
     avformat_network_init();
 

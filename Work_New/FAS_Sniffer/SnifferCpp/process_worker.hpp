@@ -23,9 +23,10 @@ typedef struct {
     AVFrame *decoded_frame;
     AVCodecID codec_id;
     VadDetector *vad;
-    short buf[240];
+    short buf[256];
     int bufsamples;
     FILE *fp;
+    FILE *fp2;
 } decode_context;
 
 
