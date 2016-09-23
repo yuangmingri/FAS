@@ -577,7 +577,7 @@ void async_save_media_stream(const std::string& filename, std::unique_ptr<RTPMed
     auto stream = stream_uptr.get();
     stream_uptr.release();
 
-
+    save_vad_result(filename,stream,ctx);
     auto save_task = [filename = filename, stream = stream]() mutable {
         save_media_stream(filename, stream);
         return std::unique_ptr<RTPMediaStream>(stream);
