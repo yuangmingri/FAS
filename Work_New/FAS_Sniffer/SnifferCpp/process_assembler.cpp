@@ -12,8 +12,9 @@
 #include "rtp_media_stream.hpp"
 #include "sip_header.hpp"
 #include "sip_metadata.hpp"
+#include "process_worker.hpp"
 
-
+#define ENABLE_FAS
 
 using boost::interprocess::interprocess_mutex;
 using boost::interprocess::scoped_lock;
@@ -112,7 +113,7 @@ void release_segment()
 
 //----------------------------------------------------------------------
 
-void process_segment()
+void process_segment(decode_context *ctx)
 {
 
 //    std::cout << "segmet in assemble#" << current_segment_cnt <<  std::endl;
@@ -133,7 +134,7 @@ void process_segment()
         }
     }
 
-    make_clean(now, write_ready_sip, write_ready_rtp);
+    make_clean(now, write_ready_sip, write_ready_rtp,ctx);
 }
 
 //----------------------------------------------------------------------
@@ -323,7 +324,7 @@ void analyze_rtp(uint64_t now, const NetworkPacket& packet)
 
 //----------------------------------------------------------------------
 
-void save_call(const std::string& call_id, Call* call)
+void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 {
     auto callee_ip = call->callee_ip();
     auto caller_ip = call->caller_ip();
@@ -489,19 +490,19 @@ void save_sip_header(SIPHeader* hdr)
 
 //----------------------------------------------------------------------
 
-void make_clean(uint64_t now, std::future<bool>& write_ready_future_sip, std::future<bool>& write_ready_future_rtp)
+void make_clean(uint64_t now, std::future<bool>& write_ready_future_sip, std::future<bool>& write_ready_future_rtp,decode_context *ctx)
 {
     if (CONFIG_MODE_DUMP_SIP_HEADERS) {
         make_clean_sip_headers(now, write_ready_future_sip);
     }
     if (CONFIG_MODE_DUMP_RTP_STREAMS) {
-        make_clean_rtp_streams(now, write_ready_future_rtp);
+        make_clean_rtp_streams(now, write_ready_future_rtp,ctx);
     }
 }
 
 //----------------------------------------------------------------------
 
-void make_clean_rtp_streams(uint64_t now, std::future<bool>& write_ready_future)
+void make_clean_rtp_streams(uint64_t now, std::future<bool>& write_ready_future,decode_context *ctx)
 {
     auto write_ready = write_ready_future.get();
 
@@ -511,7 +512,7 @@ void make_clean_rtp_streams(uint64_t now, std::future<bool>& write_ready_future)
 
         if (call->ready(now)) {
             if (write_ready) {
-                save_call(itr->first, call.get());
+                save_call(itr->first, call.get(),ctx);
             }
 
             itr = calls.erase(itr);
@@ -776,7 +777,8 @@ std::unique_ptr<RTPMediaStream> get_media_stream_by_src(uint32_t ip, uint16_t po
 void process_assembler()
 {
     using namespace assembler;
-
+	decode_context ctx;
+	
     std::cout << __func__ << " " << getpid() << std::endl;
 
     // wait for all processes to be started
@@ -786,10 +788,16 @@ void process_assembler()
     if (segments.empty()) {
         exit_nicely();
     }
+    
+#ifdef ENABLE_FAS    
+    ctx.vad = new VadDetector(256,8000);
+    av_register_all();
+    avformat_network_init();
+#endif
 
     while (true) {
         acquire_segment();
-        process_segment();
+        process_segment(&ctx);
         release_segment();
     }
 }

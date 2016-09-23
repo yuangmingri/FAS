@@ -29,9 +29,10 @@ typedef struct {
     FILE *fp2;
 } decode_context;
 
+void set_decode_context(decode_context *ctx,AVCodecID codec_id);
+void decode_audio(decode_context *ctx);
 
 void process_worker();
-
 
 namespace worker {
 

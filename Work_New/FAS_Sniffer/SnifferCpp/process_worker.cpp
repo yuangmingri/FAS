@@ -9,6 +9,8 @@
 #include "sip_header_processing.hpp"
 #include <libpq-fe.h>
 
+#define ENABLE_FAS
+
 using boost::interprocess::interprocess_mutex;
 using boost::interprocess::scoped_lock;
 using boost::interprocess::try_to_lock;
@@ -16,17 +18,6 @@ using boost::interprocess::try_to_lock;
 
 extern bool CONFIG_MODE_DUMP_RTP_STREAMS;
 extern bool CONFIG_MODE_DUMP_SIP_HEADERS;
-
-
-namespace worker {
-
-
-
-uint32_t current_packet_cnt = 0;
-uint16_t current_segment_cnt = 0;
-struct shared_memory_segment* current_segment;
-static std::deque<struct shared_memory_segment*> segments;
-scoped_lock<interprocess_mutex> segment_lock;
 
 void set_decode_context(decode_context *ctx,AVCodecID codec_id)
 {
@@ -61,6 +52,86 @@ void set_decode_context(decode_context *ctx,AVCodecID codec_id)
     av_frame_free(&ctx->decoded_frame);
     ctx->decoded_frame = NULL;
 }
+
+
+void decode_audio(decode_context *ctx)
+{
+    int len = 0;
+
+    while (ctx->avpkt.size > 0) {
+        int i, ch = 0;
+        int got_frame = 0;
+
+        if (!ctx->decoded_frame) {
+            if (!(ctx->decoded_frame = av_frame_alloc())) 
+            {
+                fprintf(stderr, "Could not allocate audio frame\n");
+                break;
+            }
+        }
+
+        len = avcodec_decode_audio4(ctx->c, ctx->decoded_frame, &got_frame, &ctx->avpkt);
+        if (len < 0) {
+            fprintf(stderr, "Error while decoding\n");
+            break;
+        }
+
+        if (got_frame) {
+            /* if a frame has been decoded, output it */
+            int data_size = av_get_bytes_per_sample(ctx->c->sample_fmt);
+            if (data_size < 0) {
+                /* This should not occur, checking just for paranoia */
+                fprintf(stderr, "Failed to calculate data size\n");
+                break;
+            }
+            int isamples = ctx->decoded_frame->nb_samples;
+            int left_samples;
+            int total_samples = sizeof(ctx->buf)/2;
+
+            short *paudio = (short*)ctx->decoded_frame->data[ch];
+            fwrite(paudio,1,isamples*2,ctx->fp2);
+           
+            //fprintf(ctx->fp, "decoded samples=%d\n",isamples);
+            fprintf(stderr, "decoded samples=%d, total=%d, buf_samples = %d\n",ctx->decoded_frame->nb_samples,total_samples,ctx->bufsamples);
+            while(isamples > 0 )
+            {
+            	left_samples = total_samples - ctx->bufsamples;
+            	if(left_samples <= isamples)
+            	{
+            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), left_samples);
+            		bool vad = ctx->vad->process((char*)ctx->buf);
+                        if(vad)
+                        {
+                            printf("true ");
+                            fprintf(ctx->fp,"true\n");
+                        }else{
+                            //printf("false ");
+                            fprintf(ctx->fp,"false\n");
+                        }
+                        fflush(ctx->fp);
+            		ctx->bufsamples = 0;
+                        isamples -= left_samples;
+            	}else {
+            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), isamples);
+            		ctx->bufsamples += isamples;
+            		isamples = 0;
+            	}
+            }
+        }
+        ctx->avpkt.size -= len;
+        ctx->avpkt.data += len;
+        ctx->avpkt.dts =
+        ctx->avpkt.pts = AV_NOPTS_VALUE;
+    }
+}
+
+namespace worker {
+
+uint32_t current_packet_cnt = 0;
+uint16_t current_segment_cnt = 0;
+struct shared_memory_segment* current_segment;
+static std::deque<struct shared_memory_segment*> segments;
+scoped_lock<interprocess_mutex> segment_lock;
 
 void acquire_segment()
 {
@@ -223,77 +294,6 @@ void analyze_sip_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
     packet.set_proto_unknown();
 }
 
-
-void decode_audio(decode_context *ctx)
-{
-    int len = 0;
-
-    while (ctx->avpkt.size > 0) {
-        int i, ch = 0;
-        int got_frame = 0;
-
-        if (!ctx->decoded_frame) {
-            if (!(ctx->decoded_frame = av_frame_alloc())) 
-            {
-                fprintf(stderr, "Could not allocate audio frame\n");
-                break;
-            }
-        }
-
-        len = avcodec_decode_audio4(ctx->c, ctx->decoded_frame, &got_frame, &ctx->avpkt);
-        if (len < 0) {
-            fprintf(stderr, "Error while decoding\n");
-            break;
-        }
-
-        if (got_frame) {
-            /* if a frame has been decoded, output it */
-            int data_size = av_get_bytes_per_sample(ctx->c->sample_fmt);
-            if (data_size < 0) {
-                /* This should not occur, checking just for paranoia */
-                fprintf(stderr, "Failed to calculate data size\n");
-                break;
-            }
-            int isamples = ctx->decoded_frame->nb_samples;
-            int left_samples;
-            int total_samples = sizeof(ctx->buf)/2;
-
-            short *paudio = (short*)ctx->decoded_frame->data[ch];
-            fwrite(paudio,1,isamples*2,ctx->fp2);
-           
-            //fprintf(ctx->fp, "decoded samples=%d\n",isamples);
-            fprintf(stderr, "decoded samples=%d, total=%d, buf_samples = %d\n",ctx->decoded_frame->nb_samples,total_samples,ctx->bufsamples);
-            while(isamples > 0 )
-            {
-            	left_samples = total_samples - ctx->bufsamples;
-            	if(left_samples <= isamples)
-            	{
-            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), left_samples);
-            		bool vad = ctx->vad->process((char*)ctx->buf);
-                        if(vad)
-                        {
-                            printf("true ");
-                            fprintf(ctx->fp,"true\n");
-                        }else{
-                            //printf("false ");
-                            fprintf(ctx->fp,"false\n");
-                        }
-                        fflush(ctx->fp);
-            		ctx->bufsamples = 0;
-                        isamples -= left_samples;
-            	}else {
-            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), isamples);
-            		ctx->bufsamples += isamples;
-            		isamples = 0;
-            	}
-            }
-        }
-        ctx->avpkt.size -= len;
-        ctx->avpkt.data += len;
-        ctx->avpkt.dts =
-        ctx->avpkt.pts = AV_NOPTS_VALUE;
-    }
-}
 //----------------------------------------------------------------------
 
 void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint16_t payload_len, decode_context *ctx)
@@ -306,8 +306,19 @@ void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
         const uint8_t* media_payload_ptr = payload_ptr + hdr_len;
         uint16_t media_payload_len = payload_len - hdr_len;
         uint8_t payload_type;
+        payload_type = get_rtp_payload_type(hdr);
+		auto meta = packet.rtp_meta();
+        meta->set_id(ntohl(hdr->sync_identifier));
+        meta->set_sport(packet.sport());
+        meta->set_dport(packet.dport());
+        meta->set_sequence_number(ntohs(hdr->sequence_number));
+        meta->set_codec(static_cast<Codec>(payload_type));
+        meta->set_payload_ptr(media_payload_ptr);
+        meta->set_payload_len(media_payload_len);
+        packet.set_proto_rtp();
+
+#ifdef ENABLE_FAS
         AVCodecID codec_type;
-        
         printf("rtpsize=%d\n",media_payload_len);
         if(ctx->fp == NULL)
         {
@@ -320,9 +331,6 @@ void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
             ctx->fp2 = fopen(filename,"w");
         }
         //fprintf(ctx->fp, "rtp payloadsize=%d\n",media_payload_len);
-        auto meta = packet.rtp_meta();
-        
-        payload_type = get_rtp_payload_type(hdr);
         switch(payload_type)
         {
             case (int)Codec::g711U:
@@ -343,21 +351,11 @@ void analyze_rtp_header(NetworkPacket& packet, const uint8_t* payload_ptr, uint1
         
         if(codec_type != ctx->codec_id)
             set_decode_context(ctx,codec_type);
-
-        meta->set_id(ntohl(hdr->sync_identifier));
-        meta->set_sport(packet.sport());
-        meta->set_dport(packet.dport());
-        meta->set_sequence_number(ntohs(hdr->sequence_number));
-        meta->set_codec(static_cast<Codec>(payload_type));
-        meta->set_payload_ptr(media_payload_ptr);
-        meta->set_payload_len(media_payload_len);
-
-        packet.set_proto_rtp();
-
         ctx->avpkt.data = (uint8_t *)media_payload_ptr;
         ctx->avpkt.size = media_payload_len;
-
         decode_audio(ctx);
+#endif
+
         return;
     }
     packet.set_proto_unknown();
@@ -383,9 +381,11 @@ void process_worker()
         exit_nicely();
     }
     
+#ifdef ENABLE_FAS    
     ctx.vad = new VadDetector(256,8000);
     av_register_all();
     avformat_network_init();
+#endif
 
     while (true) {
         acquire_segment();

@@ -27,7 +27,7 @@ void release_segment();
 
 //----------------------------------------------------------------------
 
-void process_segment();
+void process_segment(decode_context *);
 
 //----------------------------------------------------------------------
 
@@ -59,7 +59,7 @@ void analyze_rtp(uint64_t, const NetworkPacket&);
 
 //----------------------------------------------------------------------
 
-void save_call(const std::string&, Call*);
+void save_call(const std::string&, Call*,decode_context *);
 
 //----------------------------------------------------------------------
 
@@ -71,7 +71,7 @@ void async_save_header(std::unique_ptr<SIPHeader>);
 
 //----------------------------------------------------------------------
 
-void async_save_media_stream(const std::string&, std::unique_ptr<RTPMediaStream>);
+void async_save_media_stream(const std::string&, std::unique_ptr<RTPMediaStream>,decode_context *);
 
 //----------------------------------------------------------------------
 
@@ -79,11 +79,11 @@ void save_sip_header(SIPHeader*);
 
 //----------------------------------------------------------------------
 
-void make_clean(uint64_t, std::future<bool>&, std::future<bool>&);
+void make_clean(uint64_t, std::future<bool>&, std::future<bool>&,decode_context *);
 
 //----------------------------------------------------------------------
 
-void make_clean_rtp_streams(uint64_t, std::future<bool>&);
+void make_clean_rtp_streams(uint64_t, std::future<bool>&,decode_context *);
 
 //----------------------------------------------------------------------
 
