@@ -9,7 +9,7 @@
 #include "sip_header_processing.hpp"
 #include <libpq-fe.h>
 
-#define ENABLE_FAS
+//#define ENABLE_FAS
 
 using boost::interprocess::interprocess_mutex;
 using boost::interprocess::scoped_lock;
@@ -18,6 +18,17 @@ using boost::interprocess::try_to_lock;
 
 extern bool CONFIG_MODE_DUMP_RTP_STREAMS;
 extern bool CONFIG_MODE_DUMP_SIP_HEADERS;
+
+
+
+namespace worker {
+
+uint32_t current_packet_cnt = 0;
+uint16_t current_segment_cnt = 0;
+struct shared_memory_segment* current_segment;
+static std::deque<struct shared_memory_segment*> segments;
+scoped_lock<interprocess_mutex> segment_lock;
+
 
 void set_decode_context(decode_context *ctx,AVCodecID codec_id)
 {
@@ -124,14 +135,6 @@ void decode_audio(decode_context *ctx)
         ctx->avpkt.pts = AV_NOPTS_VALUE;
     }
 }
-
-namespace worker {
-
-uint32_t current_packet_cnt = 0;
-uint16_t current_segment_cnt = 0;
-struct shared_memory_segment* current_segment;
-static std::deque<struct shared_memory_segment*> segments;
-scoped_lock<interprocess_mutex> segment_lock;
 
 void acquire_segment()
 {

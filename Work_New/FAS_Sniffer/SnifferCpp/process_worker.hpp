@@ -16,6 +16,12 @@ extern "C"
 };
 #endif
 
+
+
+void process_worker();
+
+namespace worker {
+
 typedef struct {
     AVCodec *codec;
     AVCodecContext *c;
@@ -31,11 +37,6 @@ typedef struct {
 
 void set_decode_context(decode_context *ctx,AVCodecID codec_id);
 void decode_audio(decode_context *ctx);
-
-void process_worker();
-
-namespace worker {
-
 
 void acquire_segment();
 

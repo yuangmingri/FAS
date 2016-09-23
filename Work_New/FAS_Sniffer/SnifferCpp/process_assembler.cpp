@@ -12,7 +12,6 @@
 #include "rtp_media_stream.hpp"
 #include "sip_header.hpp"
 #include "sip_metadata.hpp"
-#include "process_worker.hpp"
 
 #define ENABLE_FAS
 
@@ -51,6 +50,105 @@ std::deque<std::unique_ptr<SIPHeader>> sip_headers_cached;
 std::deque<std::future<std::unique_ptr<SIPHeader>>> async_header_io;
 std::deque<std::future<std::unique_ptr<RTPMediaStream>>> async_media_stream_io;
 
+
+void set_decode_context(decode_context *ctx,AVCodecID codec_id)
+{
+    if(ctx->c)
+    {
+        avcodec_free_context(&ctx->c);
+        av_free(ctx->c);
+    }
+    if(ctx->decoded_frame)
+        av_frame_free(&ctx->decoded_frame);
+
+    av_init_packet(&ctx->avpkt);
+    ctx->codec = avcodec_find_decoder(codec_id);
+    if (!ctx->codec) {
+        fprintf(stderr,"Codec not found\n");
+        return;
+    }
+
+    ctx->c = avcodec_alloc_context3(ctx->codec);
+    if (!ctx->c) {
+        fprintf(stderr, "Could not allocate audio codec context\n");
+        return;
+    }
+
+    ctx->c->channels = 1;
+    ctx->c->sample_fmt = AV_SAMPLE_FMT_S16;
+    /* open it */
+    if (avcodec_open2(ctx->c, ctx->codec, NULL) < 0) {
+        fprintf(stderr, "Could not open codec\n");
+        return;
+    }
+    av_frame_free(&ctx->decoded_frame);
+    ctx->decoded_frame = NULL;
+}
+
+
+void decode_audio(decode_context *ctx)
+{
+    int len = 0;
+
+    while (ctx->avpkt.size > 0) {
+        int i, ch = 0;
+        int got_frame = 0;
+
+        if (!ctx->decoded_frame) {
+            if (!(ctx->decoded_frame = av_frame_alloc())) 
+            {
+                fprintf(stderr, "Could not allocate audio frame\n");
+                break;
+            }
+        }
+
+        len = avcodec_decode_audio4(ctx->c, ctx->decoded_frame, &got_frame, &ctx->avpkt);
+        if (len < 0) {
+            fprintf(stderr, "Error while decoding\n");
+            break;
+        }
+
+        if (got_frame) {
+            /* if a frame has been decoded, output it */
+            int data_size = av_get_bytes_per_sample(ctx->c->sample_fmt);
+            if (data_size < 0) {
+                /* This should not occur, checking just for paranoia */
+                fprintf(stderr, "Failed to calculate data size\n");
+                break;
+            }
+            int isamples = ctx->decoded_frame->nb_samples;
+            int left_samples;
+            int total_samples = sizeof(ctx->buf)/2;
+
+            short *paudio = (short*)ctx->decoded_frame->data[ch];
+           
+            //fprintf(ctx->fp, "decoded samples=%d\n",isamples);
+            fprintf(stderr, "decoded samples=%d, total=%d, buf_samples = %d\n",ctx->decoded_frame->nb_samples,total_samples,ctx->bufsamples);
+            while(isamples > 0 )
+            {
+            	left_samples = total_samples - ctx->bufsamples;
+            	if(left_samples <= isamples)
+            	{
+            	    ctx->total_frames++;
+            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), left_samples);
+            		bool vad = ctx->vad->process((char*)ctx->buf);
+                    if(vad)
+                        ctx->voice_frames++;
+            		ctx->bufsamples = 0;
+                    isamples -= left_samples;
+            	}else {
+            		memcpy(&ctx->buf[ctx->bufsamples],ctx->decoded_frame->data[ch] + ((ctx->decoded_frame->nb_samples - isamples)*2), isamples);
+            		ctx->bufsamples += isamples;
+            		isamples = 0;
+            	}
+            }
+        }
+        ctx->avpkt.size -= len;
+        ctx->avpkt.data += len;
+        ctx->avpkt.dts =
+        ctx->avpkt.pts = AV_NOPTS_VALUE;
+    }
+}
 
 void acquire_segment()
 {
@@ -338,7 +436,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
         auto caller_stream = get_media_stream_by_src(caller_ip, caller_port);
         if (caller_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_caller.media";
-            async_save_media_stream(filename, std::move(caller_stream));
+            async_save_media_stream(filename, std::move(caller_stream),ctx);
         } else {
             //std::cout << "caller stream not found " << get_ip_str(caller_ip) << ":" << caller_port << std::endl;
         }
@@ -348,7 +446,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
         auto callee_stream = get_media_stream_by_src(callee_ip, callee_port);
         if (callee_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_callee.media";
-            async_save_media_stream(filename, std::move(callee_stream));
+            async_save_media_stream(filename, std::move(callee_stream),ctx);
         } else {
             //std::cout << "callee stream not found " << get_ip_str(callee_ip) << ":" << callee_port << std::endl;
         }
@@ -362,7 +460,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 
         if (ringtone_stream) {
             std::string filename = CONFIG_RTP_DESTINATION_DIRECTORY + "/" + call_id + "_ringtone.media";
-            async_save_media_stream(filename, std::move(ringtone_stream));
+            async_save_media_stream(filename, std::move(ringtone_stream),ctx);
         } else {
             //std::cout << "ringtone stream not found " << get_ip_str(ringtone_ip) << ":" << ringtone_port << std::endl;
         }
@@ -370,6 +468,47 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 }
 
 //----------------------------------------------------------------------
+void save_vad_result(const std::string& filename, const RTPMediaStream* stream,decode_context *ctx)
+{
+    int codec = static_cast<int>(stream->codec());
+    char buf[128];
+    FILE *fp;
+    AVCodecID codec_type;
+    
+    sprintf(buf,"%s.txt",filename.c_str());    
+    printf("save_vad_result filename=%s\n",buf);
+    fp = fopen(buf,"w");
+    switch(codec)
+    {
+        case (int)Codec::g711U:
+            codec_type = AV_CODEC_ID_PCM_MULAW;
+            break;
+        case (int)Codec::g723:
+            codec_type = AV_CODEC_ID_G723_1;
+            break;
+        case (int)Codec::g711A:
+            codec_type = AV_CODEC_ID_PCM_ALAW;
+            break;
+        case (int)Codec::g729:
+            codec_type = AV_CODEC_ID_G729;
+            break;
+        default:
+            codec_type = AV_CODEC_ID_NONE;
+    }
+    set_decode_context(ctx,codec_type);
+    ctx->total_frames = 0;
+    ctx->voice_frames = 0;
+    auto frame_cnt = stream->frame_cnt();
+    for (int i = 0; i < frame_cnt; ++i) {
+        auto& frame = stream->frames().at(i);        
+        ctx->avpkt.data = (uint8_t *)frame->data();
+        ctx->avpkt.size = frame->data_len();
+        decode_audio(ctx);
+    }  
+    fprintf(fp,"total_frames=%d\n",ctx->total_frames);
+    fprintf(fp,"voice_frames=%d\n",ctx->voice_frames);
+    fclose(fp);
+}
 
 void save_media_stream(const std::string& filename, const RTPMediaStream* stream)
 {
@@ -433,7 +572,7 @@ void async_save_header(std::unique_ptr<SIPHeader> header)
 
 //----------------------------------------------------------------------
 
-void async_save_media_stream(const std::string& filename, std::unique_ptr<RTPMediaStream> stream_uptr)
+void async_save_media_stream(const std::string& filename, std::unique_ptr<RTPMediaStream> stream_uptr,decode_context *ctx)
 {
     auto stream = stream_uptr.get();
     stream_uptr.release();
@@ -789,6 +928,7 @@ void process_assembler()
         exit_nicely();
     }
     
+    memset(&ctx,0,sizeof(ctx));
 #ifdef ENABLE_FAS    
     ctx.vad = new VadDetector(256,8000);
     av_register_all();

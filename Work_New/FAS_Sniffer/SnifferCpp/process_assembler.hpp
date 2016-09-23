@@ -4,6 +4,20 @@
 #include <future>
 #include <memory>
 
+#include "VadDetector.h"
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswresample/swresample.h>
+								
+#ifdef __cplusplus
+};
+#endif
+
 
 
 // forward declaration
@@ -18,6 +32,21 @@ void process_assembler();
 
 namespace assembler {
 
+typedef struct {
+    AVCodec *codec;
+    AVCodecContext *c;
+    AVPacket avpkt;
+    AVFrame *decoded_frame;
+    AVCodecID codec_id;
+    VadDetector *vad;
+    short buf[256];
+    int bufsamples;
+    int total_frames;
+    int voice_frames;
+} decode_context;
+
+void set_decode_context(decode_context *ctx,AVCodecID codec_id);
+void decode_audio(decode_context *ctx);
 
 void acquire_segment();
 
