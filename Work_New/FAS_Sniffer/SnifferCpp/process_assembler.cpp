@@ -508,7 +508,7 @@ int InsertRecord(PGconn *conn, const char* table_name, const char* calltime, con
 {
 	// Append the SQL statement
 	char sSql[256];
-	sprintf(sSql, "INSERT INTO %s(callid,calltime,result) VALUES('%s', '%s', '%d')", table_name, calltime, callid, result);
+	sprintf(sSql, "INSERT INTO %s(callid,calltime,result) VALUES('%s', '%s', '%d')", table_name, callid,calltime,result);
 
 	// Execute with SQL statement
 	PGresult *res = PQexec(conn, sSql);
@@ -568,8 +568,7 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
     fclose(fp);
     
     // Saving to postgres database
-    //if(callid.find("callee") != std::string::npos)
-    if(1)
+    if(callid.find("callee") != std::string::npos)
     {
         PGconn *conn = NULL;
 	    conn = postgress_connect();
