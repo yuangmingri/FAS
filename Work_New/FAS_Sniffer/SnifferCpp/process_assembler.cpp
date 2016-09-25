@@ -575,9 +575,9 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
 	    time_t tval = time(NULL);
         struct tm *t = localtime(&tval);
         char timebuf[64];
-        sprintf(timebuf,"%d.%02d.%02d %02d:%02d:%02d.txt",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+        sprintf(timebuf,"%d.%02d.%02d %02d:%02d:%02d",t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
         int result = 1;
-        if(ctx->voice_frames > 5)
+        if(ctx->voice_frames > 10 && ctx->voice_frames*30 > ctx->total_frames)
             result = 1;
         else
             result = 0;
