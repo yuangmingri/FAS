@@ -553,12 +553,12 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
             codec_type = AV_CODEC_ID_NONE;
     }
     set_decode_context(ctx,codec_type);
-    if(ctx.vad != NULL)
+    if(ctx->vad != NULL)
     {
-        delete ctx.vad;
-        ctx.vad = NULL;
+        delete ctx->vad;
+        ctx->vad = NULL;
     }
-    ctx.vad = new VadDetector(256,8000);    
+    ctx->vad = new VadDetector(256,8000);    
     
     ctx->total_frames = 0;
     ctx->voice_frames = 0;
@@ -1020,7 +1020,7 @@ void process_assembler()
     
     memset(&ctx,0,sizeof(ctx));
 #ifdef ENABLE_FAS    
-    ctx.pad = NULL;
+    ctx.vad = NULL;
     
     av_register_all();
     avformat_network_init();
