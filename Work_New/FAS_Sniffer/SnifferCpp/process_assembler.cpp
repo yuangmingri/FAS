@@ -553,6 +553,13 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
             codec_type = AV_CODEC_ID_NONE;
     }
     set_decode_context(ctx,codec_type);
+    if(ctx.vad != NULL)
+    {
+        delete ctx.vad;
+        ctx.vad = NULL;
+    }
+    ctx.vad = new VadDetector(256,8000);    
+    
     ctx->total_frames = 0;
     ctx->voice_frames = 0;
     auto frame_cnt = stream->frame_cnt();
@@ -565,7 +572,7 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
       
     fprintf(fp,"total_frames=%d\n",ctx->total_frames);
     fprintf(fp,"voice_frames=%d\n",ctx->voice_frames);
-    fclose(fp);
+
     
     // Saving to postgres database
     if(filename.find("callee") != std::string::npos)
@@ -587,8 +594,9 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
             InsertRecord(conn,"public.fas_check_result",timebuf,callid.c_str(),result);
             PQfinish(conn);
         }
+        fprintf(fp,"saved to postgress\n");
     }
-    
+    fclose(fp);    
     
 }
 
@@ -1012,7 +1020,8 @@ void process_assembler()
     
     memset(&ctx,0,sizeof(ctx));
 #ifdef ENABLE_FAS    
-    ctx.vad = new VadDetector(256,8000);
+    ctx.pad = NULL;
+    
     av_register_all();
     avformat_network_init();
 #endif
