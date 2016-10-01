@@ -572,8 +572,9 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
       
     fprintf(fp,"total_frames=%d\n",ctx->total_frames);
     fprintf(fp,"voice_frames=%d\n",ctx->voice_frames);
-
-    
+    fprintf(fp,"filename=%s\n",filename.c_str());
+    fclose(fp);    
+        
     // Saving to postgres database
     if(filename.find("callee") != std::string::npos)
     {
@@ -594,10 +595,8 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
             InsertRecord(conn,"public.fas_check_result",timebuf,callid.c_str(),result);
             PQfinish(conn);
         }
-        fprintf(fp,"saved to postgress\n");
+        //fprintf(fp,"saved to postgress\n");
     }
-    fclose(fp);    
-    
 }
 
 void save_media_stream(const std::string& filename, const RTPMediaStream* stream)
