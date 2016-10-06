@@ -33,6 +33,11 @@ extern uint32_t CONFIG_SIP_DESTINATION_DIRECTORY_MAXSIZE;
 extern uint32_t CONFIG_SIP_DESTINATION_DIRECTORY_MAX_FILE_CNT;
 extern std::map<Codec, struct codec_details> codec_lookup_table;
 
+extern std::string CONFIG_VAD_IP;
+extern std::string CONFIG_VAD_DB;
+extern std::string CONFIG_VAD_USER;
+extern std::string CONFIG_VAD_PWD;
+extern std::string CONFIG_VAD_TABLE;
 
 namespace assembler {
 
@@ -477,20 +482,31 @@ PGconn* postgress_connect()
 	char conninfo_str[256];
     char sSql[256];
     
-	sprintf(conninfo_str, "user='postgres' password='' dbname='class4_v5' hostaddr='127.0.0.1'");
-	conn = PQconnectdb(conninfo_str);
+	//sprintf(conninfo_str, "user='postgres' password='' dbname='class4_v5' hostaddr='127.0.0.1'");
 
+	sprintf(conninfo_str, "user='%s' password='%s' dbname='%s' hostaddr='%s'",
+	    CONFIG_VAD_USER.c_str(), CONFIG_VAD_PWD.c_str(), CONFIG_VAD_DB.c_str(), CONFIG_VAD_IP.c_str());
+	
+	conn = PQconnectdb(conninfo_str);
 	// Check to see that the back-end connection was successfully made
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
+	    
 		printf("Connection to database failed\n");
+		std::cout << "VAD IP                                - " << CONFIG_VAD_IP << std::endl;
+        std::cout << "VAD DB                                - " << CONFIG_VAD_DB << std::endl;
+        std::cout << "VAD USER                              - " << CONFIG_VAD_USER << std::endl;
+        std::cout << "VAD PWD                               - " << CONFIG_VAD_PWD << std::endl;
+        std::cout << "VAD TABLE                             - " << CONFIG_VAD_TABLE << std::endl;
 		PQfinish(conn);
+        exit_nicely();
 		return NULL;
 	}
     
 
 	PGresult *res = NULL;
-	sprintf(sSql, "CREATE TABLE IF NOT EXISTS public.fas_check_result (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);");
+	//sprintf(sSql, "CREATE TABLE IF NOT EXISTS public.fas_check_result (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);");
+	sprintf(sSql, "CREATE TABLE IF NOT EXISTS %s (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);", CONFIG_VAD_TABLE.c_str());
 	res = PQexec(conn, sSql);
 
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
@@ -592,7 +608,8 @@ void save_vad_result(const std::string& callid,const std::string& filename, cons
             
         if(conn)
         {
-            InsertRecord(conn,"public.fas_check_result",timebuf,callid.c_str(),result);
+            //InsertRecord(conn,"public.fas_check_result",timebuf,callid.c_str(),result);
+            InsertRecord(conn,CONFIG_VAD_TABLE.c_str(),timebuf,callid.c_str(),result);
             PQfinish(conn);
         }
         //fprintf(fp,"saved to postgress\n");

@@ -40,6 +40,13 @@ std::string CONFIG_NETWORK_INTERFACE                   = "eth0";
 uint16_t CONFIG_SHM_COUNT                              = CONFIG_WORKING_PROCESSES + 2; // 1 per process and 1 for capturing and 1 for controller
 
 
+std::string CONFIG_VAD_IP           = "192.168.112.86";
+std::string CONFIG_VAD_DB           = "class4_v5";
+std::string CONFIG_VAD_USER         = "class4_dial";
+std::string CONFIG_VAD_PWD          = "";
+std::string CONFIG_VAD_TABLE        = "public.class4_dial";
+
+
 bool handle_exit = false;
 std::set<Codec> allowed_codecs;
 std::map<Codec, struct codec_details> codec_lookup_table;
@@ -111,6 +118,11 @@ void show_usage(std::string name)
               << "\t-w, --workers WORKERS NUMBER (Specify processes quantity)\n"
               << "\t-c, --cache CACHED PACKETS NUMBER (Specify cache size for network packets)\n"
               << "\t-m, --mode MODE (Specify mode: rtp (default) for dump media streams, sip for SIP header and all for both)\n"
+              << "\t --vadip, VAD remote host ip address\n"
+              << "\t --vaddb, VAD remote postgress database name\n"
+              << "\t --vaduser, VAD remote postgres user\n"
+              << "\t --vadpwd, VAD remote postgres password\n"
+              << "\t --vadtable, VAD remote postgres table\n"
               << std::endl;
 }
 
@@ -125,6 +137,36 @@ void parse_arguments(int argc, char** argv)
             show_usage(argv[0]);
             exit(EXIT_SUCCESS);
         }
+        
+        else if (arg == "--vadip") { // RTP dir argument
+            if (i + 1 < argc) {
+                CONFIG_VAD_IP = argv[++i];
+            }
+        }
+        else if (arg == "--vaddb") { // RTP dir argument
+            if (i + 1 < argc) {
+                CONFIG_VAD_DB = argv[++i];
+            }
+        }
+        else if (arg == "--vaduser") { // RTP dir argument
+            if (i + 1 < argc) {
+                CONFIG_VAD_USER = argv[++i];
+            }
+        }
+        
+        else if (arg == "--vadpwd") { // RTP dir argument
+            if (i + 1 < argc) {
+                CONFIG_VAD_PWD = argv[++i];
+            }
+        }
+        
+        else if (arg == "--vadtable") { // RTP dir argument
+            if (i + 1 < argc) {
+                CONFIG_VAD_TABLE = argv[++i];
+            }
+        }
+        
+        
         else if (arg == "--rtp_dir") { // RTP dir argument
             if (i + 1 < argc) {
                 CONFIG_RTP_DESTINATION_DIRECTORY = argv[++i];
@@ -220,6 +262,11 @@ void show_config()
     std::cout << "number of workers                     - " << CONFIG_WORKING_PROCESSES << std::endl;
     std::cout << "network interface name                - " << CONFIG_NETWORK_INTERFACE << std::endl;
     std::cout << "pcap capture options                  - " << CONFIG_CAPTURE_OPTIONS << std::endl;
+    std::cout << "VAD IP                                - " << CONFIG_VAD_IP << std::endl;
+    std::cout << "VAD DB                                - " << CONFIG_VAD_DB << std::endl;
+    std::cout << "VAD USER                              - " << CONFIG_VAD_USER << std::endl;
+    std::cout << "VAD PWD                               - " << CONFIG_VAD_PWD << std::endl;
+    std::cout << "VAD TABLE                             - " << CONFIG_VAD_TABLE << std::endl;
 
     std::string mode = "";
     if (CONFIG_MODE_DUMP_RTP_STREAMS) {
