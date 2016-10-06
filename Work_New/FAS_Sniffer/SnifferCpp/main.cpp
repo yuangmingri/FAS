@@ -10,7 +10,7 @@
 #include "process_flusher.hpp"
 #include "process_worker.hpp"
 #include "sip_header_processing.hpp"
-
+#include <libpq-fe.h>
 
 
 using boost::interprocess::create_only;
@@ -300,13 +300,69 @@ void launch_process(Func func)
     }
 }
 
+static PGconn* postgress_connect()
+{
+	PGconn *conn = NULL;
+	char conninfo_str[256];
+    char sSql[256];
+    
+	//sprintf(conninfo_str, "user='postgres' password='' dbname='class4_v5' hostaddr='127.0.0.1'");
+
+	sprintf(conninfo_str, "user='%s' password='%s' dbname='%s' hostaddr='%s'",
+	    CONFIG_VAD_USER.c_str(), CONFIG_VAD_PWD.c_str(), CONFIG_VAD_DB.c_str(), CONFIG_VAD_IP.c_str());
+	
+	conn = PQconnectdb(conninfo_str);
+	// Check to see that the back-end connection was successfully made
+	if (PQstatus(conn) != CONNECTION_OK)
+	{
+	    
+		printf("Connection to database failed\n");
+		std::cout << "VAD IP                                - " << CONFIG_VAD_IP << std::endl;
+        std::cout << "VAD DB                                - " << CONFIG_VAD_DB << std::endl;
+        std::cout << "VAD USER                              - " << CONFIG_VAD_USER << std::endl;
+        std::cout << "VAD PWD                               - " << CONFIG_VAD_PWD << std::endl;
+        std::cout << "VAD TABLE                             - " << CONFIG_VAD_TABLE << std::endl;
+		PQfinish(conn);
+        exit_nicely();
+		return NULL;
+	}
+    
+
+	PGresult *res = NULL;
+	//sprintf(sSql, "CREATE TABLE IF NOT EXISTS public.fas_check_result (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);");
+	sprintf(sSql, "CREATE TABLE IF NOT EXISTS %s (ID serial PRIMARY KEY, callid VARCHAR (255) NOT NULL, calltime VARCHAR (255) NOT NULL, result smallint);", CONFIG_VAD_TABLE.c_str());
+	res = PQexec(conn, sSql);
+
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		printf("Create table failed\n");
+		PQclear(res);
+		PQfinish(conn);
+		return NULL;
+	}	
+	// Clear result
+	PQclear(res);
+	return conn;
+}
+
 //----------------------------------------------------------------------
 
 int main(int argc, char** argv)
 {
     parse_arguments(argc, argv);
+    
     show_config();
-
+    
+    printf("postgress database connecting\n");
+    PGconn* conn= postgress_connect();
+    if(conn != NULL)
+    {
+        printf("postgress database connection success\n");
+        PQfinish(conn);
+    }else {
+        printf("postgress database connection fail\n");
+    }
+        
     // some additional initiations
     init_codecs();
     init_regex_patterns();

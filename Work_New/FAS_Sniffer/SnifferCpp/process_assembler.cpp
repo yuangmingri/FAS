@@ -476,7 +476,7 @@ void save_call(const std::string& call_id, Call* call,decode_context *ctx)
 
 //----------------------------------------------------------------------
 
-PGconn* postgress_connect()
+static PGconn* postgress_connect()
 {
 	PGconn *conn = NULL;
 	char conninfo_str[256];
