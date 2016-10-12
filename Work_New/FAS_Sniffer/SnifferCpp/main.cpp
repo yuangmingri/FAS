@@ -346,6 +346,30 @@ static PGconn* postgress_connect()
 }
 
 //----------------------------------------------------------------------
+int InsertRecord(PGconn *conn, const char* table_name, const char* calltime, const char *callid,int result)
+{
+	// Append the SQL statement
+	char sSql[256];
+	sprintf(sSql, "INSERT INTO %s(callid,calltime,result) VALUES('%s', '%s', '%d')", table_name, callid,calltime,result);
+
+	// Execute with SQL statement
+	PGresult *res = PQexec(conn, sSql);
+    ExecStatusType  status = PQresultStatus(res);
+    printf("Postgres Result Status = %s\n",PQresStatus(status));
+        
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		printf("Insert record failed\n");
+		printf("Postgres error string=%s\n",PQresultErrorMessage(res));
+		PQclear(res);
+		PQfinish(conn);
+		return -1;
+	}
+
+	// Clear result
+	PQclear(res);
+	return 0;
+}
 
 int main(int argc, char** argv)
 {
@@ -358,9 +382,27 @@ int main(int argc, char** argv)
     if(conn != NULL)
     {
         printf("postgress database connection success\n");
+        int i;
+        char timebuf[64];
+        char callid[64];
+        for(i = 0; i < 10; i++)
+        {
+            time_t t = time(NULL);
+            struct tm tm = *localtime(&t); 
+            
+            sprintf(timebuf,"%d-%d-%d %d:%d:%d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+            sprintf(callid,"call-%d-%d",tm.tm_min,i+1);
+            InsertRecord(conn,CONFIG_VAD_TABLE.c_str(),timebuf,callid,i%2);
+        }
+        
         PQfinish(conn);
+        printf("wrote ten rows to database for test\n");
+        printf("sleeping 1 second....\n");
+        usleep(1000*1000);
+        
     }else {
         printf("postgress database connection fail\n");
+        exit_nicely();
     }
         
     // some additional initiations
