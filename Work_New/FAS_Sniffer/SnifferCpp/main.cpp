@@ -382,7 +382,7 @@ int main(int argc, char** argv)
     if(conn != NULL)
     {
         printf("postgress database connection success\n");
-        int i;
+        /*int i;
         char timebuf[64];
         char callid[64];
         for(i = 0; i < 10; i++)
@@ -393,12 +393,12 @@ int main(int argc, char** argv)
             sprintf(timebuf,"%d-%d-%d %d:%d:%d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
             sprintf(callid,"call-%d-%d",tm.tm_min,i+1);
             InsertRecord(conn,CONFIG_VAD_TABLE.c_str(),timebuf,callid,i%2);
-        }
+        }*/
         
         PQfinish(conn);
-        printf("wrote ten rows to database for test\n");
-        printf("sleeping 1 second....\n");
-        usleep(1000*1000);
+        // printf("wrote ten rows to database for test\n");
+        // printf("sleeping 1 second....\n");
+        // usleep(1000*1000);
         
     }else {
         printf("postgress database connection fail\n");
